@@ -221,17 +221,15 @@ class Game:
         restart_rect = restart_surface.get_rect(center=(CELL_NUMBER * CELL_SIZE // 2, CELL_NUMBER * CELL_SIZE // 2 + 50))
         screen.blit(restart_surface, restart_rect)
 
-async def main():
+def main():
     game = Game()
-    SCREEN_UPDATE = pygame.USEREVENT
+    clock = pygame.time.Clock()  # 控制遊戲更新頻率
 
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 return
-            if event.type == SCREEN_UPDATE:
-                game.update()
             if event.type == pygame.KEYDOWN:
                 if not game.game_over:
                     if event.key == pygame.K_UP and game.snake.direction != Vector2(0, 1):
@@ -247,10 +245,11 @@ async def main():
                         game.reset()
 
         screen.fill((175, 215, 70))
+        game.update()
         game.draw_elements()
         pygame.display.update()
 
-        pygame.time.set_timer(SCREEN_UPDATE, game.speed)
-        await asyncio.sleep(0)
+        clock.tick(10)  # 控制每秒幀數
 
-asyncio.run(main())
+# 移除 asyncio，直接運行主循環
+main()
