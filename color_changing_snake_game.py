@@ -1,7 +1,7 @@
 import pygame
 import random
 import time
-import asyncio
+import math
 from pygame.math import Vector2
 
 # Initialize Pygame
@@ -19,6 +19,7 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 BLACK = (0, 0, 0)
+GOLD = (255, 215, 0)
 
 class Snake:
     def __init__(self):
@@ -26,6 +27,8 @@ class Snake:
         self.direction = Vector2(1, 0)
         self.color = WHITE
         self.width = 1
+        self.rainbow_mode = False
+        self.rainbow_start_time = 0 
 
     def draw(self):
         for i, segment in enumerate(self.body):
@@ -33,21 +36,29 @@ class Snake:
             y = int(segment.y * CELL_SIZE)
             rect = pygame.Rect(x, y, CELL_SIZE, CELL_SIZE)
             
-            # Create a gradient effect
-            color = self.get_gradient_color(i)
+            try:
+                color = self.get_rainbow_color(i) if self.rainbow_mode else self.get_gradient_color(i)
+                pygame.draw.rect(screen, color, rect, border_radius=int(CELL_SIZE * self.width / 2))
+            except ValueError:
+                # Fallback to white if there's an issue with the color
+                pygame.draw.rect(screen, WHITE, rect, border_radius=int(CELL_SIZE * self.width / 2))
             
-            # Draw a rounded rectangle for the body
-            pygame.draw.rect(screen, color, rect, border_radius=int(CELL_SIZE * self.width / 2))
-            
-            # Add eyes to the head
             if i == 0:
                 self.draw_eyes(x, y)
 
     def get_gradient_color(self, index):
-        fade = max(0, 1 - index * 0.1)  # Gradually fade to black
+        fade = max(0, 1 - index * 0.1)
         r = int(self.color[0] * fade)
         g = int(self.color[1] * fade)
         b = int(self.color[2] * fade)
+        return (r, g, b)
+
+    def get_rainbow_color(self, index):
+        t = pygame.time.get_ticks() / 1000  # Time in seconds
+        frequency = 0.5
+        r = int((math.sin(frequency * t + index * 0.5) * 127 + 128))
+        g = int((math.sin(frequency * t + index * 0.5 + 2) * 127 + 128))
+        b = int((math.sin(frequency * t + index * 0.5 + 4) * 127 + 128))
         return (r, g, b)
 
     def draw_eyes(self, x, y):
@@ -79,6 +90,14 @@ class Snake:
             b = (self.color[2] + new_color[2]) // 2
             self.color = (r, g, b)
 
+    def activate_rainbow_mode(self):
+        self.rainbow_mode = True
+        self.rainbow_start_time = time.time()
+
+    def update_rainbow_mode(self):
+        if self.rainbow_mode and time.time() - self.rainbow_start_time > 10:
+            self.rainbow_mode = False
+
     def fatten(self):
         self.width = min(self.width + 0.1, 1)
 
@@ -87,41 +106,74 @@ class Snake:
 
 class Food:
     def __init__(self):
-        self.randomize()
+        self.fruits = [self.create_fruit(), self.create_fruit()]
+        self.golden_fruit = None
+        self.golden_fruit_spawn_time = 0
+
+    def create_fruit(self):
+        return {
+            'pos': Vector2(random.randint(0, CELL_NUMBER - 1), random.randint(0, CELL_NUMBER - 1)),
+            'color': random.choice([RED, GREEN, BLUE])
+        }
 
     def draw(self):
-        rect = pygame.Rect(int(self.pos.x * CELL_SIZE), int(self.pos.y * CELL_SIZE), CELL_SIZE, CELL_SIZE)
-        pygame.draw.ellipse(screen, self.color, rect)  # Use ellipse for a more fruit-like appearance
-        # Add a shine effect
-        shine_pos = (int(self.pos.x * CELL_SIZE + CELL_SIZE * 0.2), int(self.pos.y * CELL_SIZE + CELL_SIZE * 0.2))
+        for fruit in self.fruits:
+            self.draw_fruit(fruit['pos'], fruit['color'])
+        if self.golden_fruit:
+            self.draw_fruit(self.golden_fruit['pos'], GOLD)
+
+    def draw_fruit(self, pos, color):
+        rect = pygame.Rect(int(pos.x * CELL_SIZE), int(pos.y * CELL_SIZE), CELL_SIZE, CELL_SIZE)
+        pygame.draw.ellipse(screen, color, rect)
+        shine_pos = (int(pos.x * CELL_SIZE + CELL_SIZE * 0.2), int(pos.y * CELL_SIZE + CELL_SIZE * 0.2))
         pygame.draw.circle(screen, WHITE, shine_pos, CELL_SIZE // 8)
 
-    def randomize(self):
-        self.pos = Vector2(random.randint(0, CELL_NUMBER - 1), random.randint(0, CELL_NUMBER - 1))
-        self.color = random.choice([RED, GREEN, BLUE])
+    def respawn_fruit(self, index):
+        self.fruits[index] = self.create_fruit()
+
+    def spawn_golden_fruit(self):
+        if not self.golden_fruit and random.random() < 0.01:  # 1% chance each frame
+            self.golden_fruit = {
+                'pos': Vector2(random.randint(0, CELL_NUMBER - 1), random.randint(0, CELL_NUMBER - 1)),
+                'spawn_time': time.time()
+            }
+
+    def update_golden_fruit(self):
+        if self.golden_fruit and time.time() - self.golden_fruit['spawn_time'] > 5:  # Disappear after 5 seconds
+            self.golden_fruit = None
 
 class Sprite:
     def __init__(self):
-        self.randomize()
+        self.pos = self.random_position()
+        self.respawn_time = None
 
     def draw(self):
-        rect = pygame.Rect(int(self.pos.x * CELL_SIZE), int(self.pos.y * CELL_SIZE), CELL_SIZE, CELL_SIZE)
-        pygame.draw.rect(screen, BLACK, rect, border_radius=CELL_SIZE // 4)
-        # Add eyes to make it look more like a sprite
-        eye_radius = CELL_SIZE // 8
-        left_eye = (int(self.pos.x * CELL_SIZE + CELL_SIZE // 4), int(self.pos.y * CELL_SIZE + CELL_SIZE // 4))
-        right_eye = (int(self.pos.x * CELL_SIZE + 3 * CELL_SIZE // 4), int(self.pos.y * CELL_SIZE + CELL_SIZE // 4))
-        pygame.draw.circle(screen, WHITE, left_eye, eye_radius)
-        pygame.draw.circle(screen, WHITE, right_eye, eye_radius)
+        if self.respawn_time is None:
+            rect = pygame.Rect(int(self.pos.x * CELL_SIZE), int(self.pos.y * CELL_SIZE), CELL_SIZE, CELL_SIZE)
+            pygame.draw.rect(screen, BLACK, rect, border_radius=CELL_SIZE // 4)
+            eye_radius = CELL_SIZE // 8
+            left_eye = (int(self.pos.x * CELL_SIZE + CELL_SIZE // 4), int(self.pos.y * CELL_SIZE + CELL_SIZE // 4))
+            right_eye = (int(self.pos.x * CELL_SIZE + 3 * CELL_SIZE // 4), int(self.pos.y * CELL_SIZE + CELL_SIZE // 4))
+            pygame.draw.circle(screen, WHITE, left_eye, eye_radius)
+            pygame.draw.circle(screen, WHITE, right_eye, eye_radius)
 
-    def randomize(self):
-        self.pos = Vector2(random.randint(0, CELL_NUMBER - 1), random.randint(0, CELL_NUMBER - 1))
+    def random_position(self):
+        return Vector2(random.randint(0, CELL_NUMBER - 1), random.randint(0, CELL_NUMBER - 1))
 
     def move(self):
-        direction = random.choice([Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)])
-        new_pos = self.pos + direction
-        if 0 <= new_pos.x < CELL_NUMBER and 0 <= new_pos.y < CELL_NUMBER:
-            self.pos = new_pos
+        if self.respawn_time is None:
+            direction = random.choice([Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)])
+            new_pos = self.pos + direction
+            if 0 <= new_pos.x < CELL_NUMBER and 0 <= new_pos.y < CELL_NUMBER:
+                self.pos = new_pos
+
+    def eliminate(self):
+        self.respawn_time = time.time() + 10  # Set to respawn after 10 seconds
+
+    def update(self):
+        if self.respawn_time and time.time() >= self.respawn_time:
+            self.pos = self.random_position()
+            self.respawn_time = None
 
 class Game:
     def __init__(self):
@@ -135,17 +187,63 @@ class Game:
         self.start_time = time.time()
         self.last_sprite_spawn = time.time()
         self.game_over = False
-        self.speed = 150  # Initial speed (milliseconds between updates)
+        self.speed = 150
         self.last_speed_increase = time.time()
+
+    def check_collision(self):
+        head = self.snake.body[0]
+        print(f"Snake in rainbow mode: {self.snake.rainbow_mode}")  
+         
+        # 檢查與食物的碰撞
+        for i, fruit in enumerate(self.food.fruits):
+            if fruit['pos'] == head:
+                self.snake.grow()
+                self.snake.change_color(fruit['color'])
+                self.snake.fatten()
+                self.food.respawn_fruit(i)
+                self.score += 1
+
+        # 檢查與金色食物的碰撞
+        if self.food.golden_fruit and self.food.golden_fruit['pos'] == head:
+            self.snake.activate_rainbow_mode()
+            self.food.golden_fruit = None
+            self.score += 5
+
+        # 檢查與小精靈的碰撞
+        for sprite in self.sprites:
+            if sprite.respawn_time is None:  # 只檢查活躍的小精靈
+                if sprite.pos == head:
+                    if self.snake.rainbow_mode:
+                        sprite.eliminate()
+                        self.score += 2
+                    else:
+                        self.snake.shrink()
+                        self.snake.slim()
+                        if self.score > 0:
+                            self.score -= 1
+                        if len(self.snake.body) == 1:
+                            self.game_over = True
+                elif sprite.pos in self.snake.body[1:]:
+                    self.snake.shrink()
+                    self.snake.slim()
+                    if self.score > 0:
+                        self.score -= 1
+                    if len(self.snake.body) == 1:
+                        self.game_over = True
 
     def update(self):
         if not self.game_over:
             self.snake.move()
+            self.snake.update_rainbow_mode()
             self.check_collision()
             self.check_fail()
             self.move_sprites()
             self.spawn_sprites()
             self.update_speed()
+            self.food.spawn_golden_fruit()
+            self.food.update_golden_fruit()
+            for sprite in self.sprites:
+                sprite.update()
 
     def draw_elements(self):
         self.food.draw()
@@ -158,23 +256,35 @@ class Game:
             self.draw_game_over()
 
     def check_collision(self):
-        if self.food.pos == self.snake.body[0]:
-            self.snake.grow()
-            self.snake.change_color(self.food.color)
-            self.snake.fatten()
-            self.food.randomize()
-            self.score += 1
+        head = self.snake.body[0]
+        for i, fruit in enumerate(self.food.fruits):
+            if fruit['pos'] == head:
+                self.snake.grow()
+                self.snake.change_color(fruit['color'])
+                self.snake.fatten()
+                self.food.respawn_fruit(i)
+                self.score += 1
+
+        if self.food.golden_fruit and self.food.golden_fruit['pos'] == head:
+            self.snake.activate_rainbow_mode()
+            self.food.golden_fruit = None
+            self.score += 5
 
         for sprite in self.sprites:
-            if sprite.pos == self.snake.body[0]:
-                self.snake.shrink()
-                self.snake.slim()
-                if self.score > 0:
-                    self.score -= 1
-                if len(self.snake.body) == 1:
-                    self.game_over = True
-                else:
-                    self.snake.color = WHITE if len(self.snake.body) == 2 else self.snake.color
+            if sprite.respawn_time is None:  # Only check collision if sprite is active
+                if sprite.pos in self.snake.body:
+                    if sprite.pos == head and self.snake.rainbow_mode:
+                        sprite.eliminate()
+                        self.score += 2
+                    else:
+                        self.snake.shrink()
+                        self.snake.slim()
+                        if self.score > 0:
+                            self.score -= 1
+                        if len(self.snake.body) == 1:
+                            self.game_over = True
+                        else:
+                            self.snake.color = WHITE if len(self.snake.body) == 2 else self.snake.color
 
     def check_fail(self):
         if not 0 <= self.snake.body[0].x < CELL_NUMBER or not 0 <= self.snake.body[0].y < CELL_NUMBER:
@@ -190,14 +300,14 @@ class Game:
 
     def spawn_sprites(self):
         current_time = time.time()
-        if current_time - self.start_time > 180 and current_time - self.last_sprite_spawn > 60:
+        if current_time - self.start_time > 60 and current_time - self.last_sprite_spawn > 30:
             self.sprites.append(Sprite())
             self.last_sprite_spawn = current_time
 
     def update_speed(self):
         current_time = time.time()
-        if current_time - self.start_time > 180 and current_time - self.last_speed_increase > 30:
-            self.speed = max(50, self.speed - 10)  # Increase speed, but not faster than 50ms
+        if current_time - self.start_time > 60 and current_time - self.last_speed_increase > 30:
+            self.speed = max(50, self.speed - 10)
             self.last_speed_increase = current_time
 
     def draw_score(self):
@@ -223,7 +333,7 @@ class Game:
 
 def main():
     game = Game()
-    clock = pygame.time.Clock()  # 控制遊戲更新頻率
+    clock = pygame.time.Clock()
 
     while True:
         for event in pygame.event.get():
@@ -249,7 +359,7 @@ def main():
         game.draw_elements()
         pygame.display.update()
 
-        clock.tick(10)  # 控制每秒幀數
+        clock.tick(1000 // game.speed)  # Adjust game speed
 
-# 移除 asyncio，直接運行主循環
-main()
+if __name__ == "__main__":
+    main()
