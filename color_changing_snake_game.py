@@ -192,9 +192,8 @@ class Game:
 
     def check_collision(self):
         head = self.snake.body[0]
-        print(f"Snake in rainbow mode: {self.snake.rainbow_mode}")  
-         
-        # 檢查與食物的碰撞
+        
+        # Check collision with food
         for i, fruit in enumerate(self.food.fruits):
             if fruit['pos'] == head:
                 self.snake.grow()
@@ -203,15 +202,15 @@ class Game:
                 self.food.respawn_fruit(i)
                 self.score += 1
 
-        # 檢查與金色食物的碰撞
+        # Check collision with golden fruit
         if self.food.golden_fruit and self.food.golden_fruit['pos'] == head:
             self.snake.activate_rainbow_mode()
             self.food.golden_fruit = None
             self.score += 5
 
-        # 檢查與小精靈的碰撞
+        # Check collision with sprites
         for sprite in self.sprites:
-            if sprite.respawn_time is None:  # 只檢查活躍的小精靈
+            if sprite.respawn_time is None:  # Only check collision if sprite is active
                 if sprite.pos == head:
                     if self.snake.rainbow_mode:
                         sprite.eliminate()
@@ -254,37 +253,6 @@ class Game:
         self.draw_timer()
         if self.game_over:
             self.draw_game_over()
-
-    def check_collision(self):
-        head = self.snake.body[0]
-        for i, fruit in enumerate(self.food.fruits):
-            if fruit['pos'] == head:
-                self.snake.grow()
-                self.snake.change_color(fruit['color'])
-                self.snake.fatten()
-                self.food.respawn_fruit(i)
-                self.score += 1
-
-        if self.food.golden_fruit and self.food.golden_fruit['pos'] == head:
-            self.snake.activate_rainbow_mode()
-            self.food.golden_fruit = None
-            self.score += 5
-
-        for sprite in self.sprites:
-            if sprite.respawn_time is None:  # Only check collision if sprite is active
-                if sprite.pos in self.snake.body:
-                    if sprite.pos == head and self.snake.rainbow_mode:
-                        sprite.eliminate()
-                        self.score += 2
-                    else:
-                        self.snake.shrink()
-                        self.snake.slim()
-                        if self.score > 0:
-                            self.score -= 1
-                        if len(self.snake.body) == 1:
-                            self.game_over = True
-                        else:
-                            self.snake.color = WHITE if len(self.snake.body) == 2 else self.snake.color
 
     def check_fail(self):
         if not 0 <= self.snake.body[0].x < CELL_NUMBER or not 0 <= self.snake.body[0].y < CELL_NUMBER:
